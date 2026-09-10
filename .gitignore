@@ -26,6 +26,19 @@ Desktop.ini
 *.jks
 *.keystore
 
+# Local Spring / Maven configuration
+application-local*.yml
+application-local*.yaml
+application-local*.properties
+application-dev*.yml
+application-dev*.yaml
+application-dev*.properties
+.mvn/settings.xml
+/config/
+
+# Local history snapshots (keep on disk)
+/deliverables/history/
+
 # Logs and temporary files
 *.log
 logs/

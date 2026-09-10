@@ -1,0 +1,17 @@
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:8080}
+spring:
+  application:
+    name: simple-auto-refund
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: ${DASHSCOPE_MODEL:qwen-plus}
+          temperature: 0.3
+logging:
+  level:
+    # 开启 DEBUG 会输出对话内容；本地演示时可按需调整。
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: INFO

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>售后客服 · 模拟退款</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; background: #f5f7fb; color: #243145; font: 16px/1.6 system-ui, sans-serif; }
+    main { max-width: 800px; margin: 36px auto; padding: 0 20px; } h1 { margin-bottom: 4px; } .hint { color: #617089; }
+    section { background: white; padding: 22px; border-radius: 14px; margin: 18px 0; border: 1px solid #e1e7ef; }
+    .row { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; } label { flex: 1; min-width: 180px; }
+    input, textarea { display: block; width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #b9c5d6; border-radius: 7px; font: inherit; }
+    button { padding: 11px 18px; background: #275cd5; border: 0; border-radius: 7px; color: white; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; } #messages { min-height: 220px; max-height: 480px; overflow-y: auto; }
+    .message { padding: 12px 15px; margin: 12px 0; background: #f0f4fa; border-radius: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .user { background: #e6efff; } #status { overflow-wrap: anywhere; font-size: 14px; } .error { color: #b42318; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>售后客服</h1>
+  <div class="hint">学习演示 · 退款仅输出模拟日志，不会产生真实资金操作。</div>
+  <section>
+    <form id="sessionForm" class="row">
+      <label>用户 ID<input id="userId" value="1001" required></label>
+      <label>订单号<input id="orderId" value="202609100001" required></label>
+      <button id="start" type="submit">开始新会话</button>
+    </form>
+    <p id="status" class="hint" role="status">先创建会话，再描述商品问题。</p>
+  </section>
+  <section>
+    <div id="messages" role="log" aria-live="polite"></div>
+    <form id="askForm">
+      <label for="question">你的问题</label>
+      <textarea id="question" rows="3" placeholder="例如：我买的这件衬衫刚收到，袖口就开线了。" required disabled></textarea>
+      <button id="send" type="submit" disabled>发送</button>
+    </form>
+  </section>
+</main>
+<script>
+  const el = id => document.getElementById(id);
+  let chatId = null;
+  let stream = null;
+  function busy(value) {
+    el('start').disabled = value;
+    el('send').disabled = value || !chatId;
+    el('question').disabled = value || !chatId;
+  }
+  function message(role, text) {
+    const node = document.createElement('div');
+    node.className = 'message ' + role;
+    node.textContent = text;
+    el('messages').appendChild(node);
+    node.scrollIntoView({block: 'nearest'});
+    return node;
+  }
+  el('sessionForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (stream) stream.close();
+    chatId = null;
+    busy(true);
+    el('status').className = 'hint';
+    el('status').textContent = '正在初始化对话…';
+    try {
+      const query = new URLSearchParams({userId: el('userId').value, orderId: el('orderId').value});
+      const response = await fetch('/api/refund/newChat?' + query);
+      if (!response.ok) throw new Error('初始化失败，请检查后端日志和模型配置。');
+      const chat = await response.json();
+      if (!chat.chatId || !chat.orderId || !chat.userId || chat.status !== 'CHAT_START') throw new Error('模型未返回完整会话信息，请重试。');
+      chatId = chat.chatId;
+      el('status').textContent = `订单 ${chat.orderId} · 会话 ${chatId} · ${chat.status}`;
+      el('messages').replaceChildren();
+      message('assistant', '您好，请描述商品遇到的问题。');
+    } catch (error) {
+      el('status').className = 'error';
+      el('status').textContent = error.message;
+    } finally { busy(false); }
+  });
+  el('askForm').addEventListener('submit', event => {
+    event.preventDefault();
+    const question = el('question').value.trim();
+    if (!question || !chatId || el('send').disabled) return;
+    message('user', question);
+    el('question').value = '';
+    const reply = message('assistant', '');
+    busy(true);
+    const query = new URLSearchParams({question, chatId});
+    stream = new EventSource('/api/refund/ask?' + query);
+    const finish = () => { stream.close(); stream = null; busy(false); el('question').focus(); };
+    stream.onmessage = event => { reply.textContent += event.data; reply.scrollIntoView({block: 'nearest'}); };
+    stream.addEventListener('done', finish);
+    stream.addEventListener('failure', event => { reply.textContent += '\n' + event.data; finish(); });
+    // 关闭自动重连，避免同一轮问题在断线后自动重复发送。
+    stream.onerror = () => { reply.textContent += '\n连接中断，请检查后端日志后重新提问。'; finish(); };
+  });
+</script>
+</body>
+</html>
